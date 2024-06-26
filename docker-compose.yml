@@ -1,0 +1,83 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  mongodb:
+    image: mongo:4.4
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: topsecret
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: topsecret
+      POSTGRES_DB: auth
+    networks:
+      - app-network
+
+  blog-service:
+    build:
+      context: ./apps/blog-service
+    ports:
+      - "3001:3000"
+    depends_on:
+      - rabbitmq
+      - mongodb
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - MONGODB_URL=mongodb://root:topsecret@mongodb:27017/blogdb?authSource=admin
+    networks:
+      - app-network
+
+  auth-service:
+    build:
+      context: ./apps/auth-service
+    ports:
+      - "3002:3000"
+    depends_on:
+      - rabbitmq
+      - postgres
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - POSTGRES_URL=postgresql://user:topsecret@postgres:5432/auth
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./apps/frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - blog-service
+      - auth-service
+    networks:
+      - app-network
+
+  gateway:
+    build:
+      context: ./apps/gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - blog-service
+      - auth-service
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
